@@ -550,12 +550,34 @@ async function skipPost(id) {
   if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.25s'; setTimeout(() => el.remove(), 250); }
 }
 
-async function triggerScan() {
-  try {
-    await fetch(API_BASE + '/api/scan', { method: 'POST' });
-    toast('Scan started!');
-    setTimeout(loadData, 1000);
-  } catch(e) { toast('Error: ' + e.message); }
+const SEARCH_QUERIES=['can\'t watch','not available in my country','geo blocked','streaming abroad','moving to china internet','moving to uae internet','internet censorship','bypass geo','isp throttling','watch from abroad','vpn','geoblocked streaming','not available in my region','blocked in my country','watch outside country'];
+const STRONG_C=['can\'t watch','cannot watch','not available in','blocked in','streaming abroad','outside my country','outside the us','outside uk','geo restrict','geoblocked','bypass','unblock','watch abroad','vpn','proxy','internet in china','internet in russia','internet in uae','internet in iran','moving to china','moving to russia','moving to uae','isp throttl','censorship','being tracked','surveillance','region locked','country locked','access netflix','watch nfl','watch formula'];
+const NEG_C=['where to stay','accommodation','airbnb','hotel','hostel','salary','visa application','applying for','job offer','bank account','health insurance','dentist','wedding','recipe','restaurant','food delivery','relationship advice','dating','breakup','pet','workout','weight loss','medication','megathread','mod post','weekly thread','vpn not working','vpn slow','cancel subscription','already have a vpn','flight deal','things to do in','tourist','sightseeing','itinerary'];
+function cScore(p){const t=((p.title||'')+' '+(p.selftext||'')).toLowerCase();for(const n of NEG_C){if(t.includes(n))return 0;}if((p.subreddit||'').toLowerCase().includes('vpn'))return 0;let ok=false;for(const s of STRONG_C){if(t.includes(s)){ok=true;break;}}if(!ok)return 0;let sc=60;const m=(Date.now()/1000-p.created_utc)/60;if(m<15)sc+=80;else if(m<30)sc+=60;else if(m<60)sc+=40;else if(m<240)sc+=20;else if(m>1440)sc-=30;const c=p.num_comments||0;if(c===0)sc+=80;else if(c===1)sc+=50;else if(c<=3)sc+=30;else if(c<=10)sc+=10;else if(c>=20)sc-=20;const ti=(p.title||'').toLowerCase();if(ti.endsWith('?')||ti.startsWith('how')||ti.startsWith('what'))sc+=15;if(t.includes('china')||t.includes('russia')||t.includes('iran')||t.includes('uae'))sc+=25;if(t.includes('netflix')||t.includes('streaming')||t.includes('watch'))sc+=10;return Math.max(0,Math.round(sc));}
+function cIntent(p){const t=((p.title||'')+' '+(p.selftext||'')).toLowerCase();for(const s of STRONG_C){if(t.includes(s))return s;}return 'vpn intent';}
+async function fetchQ(q){const url='https://www.reddit.com/search.json?q='+encodeURIComponent(q)+'&sort=new&limit=25&t=day&raw_json=1';try{const r=await fetch(url,{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(8000)});if(!r.ok)return[];const d=await r.json();return(d?.data?.children||[]).map(c=>c.data);}catch{return[];}}
+async function triggerScan(){
+  const btn=document.getElementById('scan-btn');
+  btn.disabled=true;btn.textContent='⏳ SCANNING...';btn.classList.add('scanning');
+  const seen=new Set(allPosts.map(p=>p.id));const results=[];
+  for(let i=0;i<SEARCH_QUERIES.length;i++){
+    const q=SEARCH_QUERIES[i];
+    document.getElementById('log-bar').textContent='Scanning: "'+q+'"... ('+(i+1)+'/'+SEARCH_QUERIES.length+')';
+    const posts=await fetchQ(q);
+    posts.forEach(p=>{
+      if(seen.has(p.id))return;
+      const ageH=(Date.now()/1000-p.created_utc)/3600;
+      if(ageH>48)return;
+      const score=cScore(p);if(score<50)return;
+      seen.add(p.id);
+      results.push({id:p.id,title:p.title,body:(p.selftext||'').substring(0,500),url:'https://reddit.com'+p.permalink,sub:p.subreddit,score,intent:cIntent(p),comments:p.num_comments||0,created:p.created_utc,upvotes:p.score||0,done:false,skipped:false,foundAt:Date.now()});
+    });
+  }
+  try{await fetch(API_BASE+'/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({results})});}catch{}
+  btn.disabled=false;btn.textContent='⊕ SCAN NOW';btn.classList.remove('scanning');
+  document.getElementById('log-bar').textContent='Done — '+results.length+' new posts found';
+  toast('Found '+results.length+' posts');
+  await loadData();
 }
 
 function renderQueue() {
