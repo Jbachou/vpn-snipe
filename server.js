@@ -81,22 +81,108 @@ app.get('/api/status', (req, res) => {
 
 // PROXY — fetch Reddit server-side to avoid CORS
 app.get('/proxy', async (req, res) => {
-  const url = req.query.url;
-  if (!url || !url.includes('reddit.com')) return res.status(400).json({ error: 'invalid url' });
+  const q = req.query.q;
+  if (!q) return res.status(400).json({ error: 'missing q param' });
+  const url = 'https://www.reddit.com/search.json?q=' + encodeURIComponent(q) + '&sort=new&limit=25&t=day&raw_json=1';
+  const headers = {
+    'User-Agent': 'script:vpn-snipe:v1.0 (by /u/sudo_overcoffee)',
+    'Accept': 'application/json',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cache-Control': 'no-cache'
+  };
   try {
-    const r = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; VPNSnipeBot/1.0)',
-        'Accept': 'application/json'
-      },
-      signal: AbortSignal.timeout(10000)
-    });
-    const data = await r.json();
-    res.json(data);
+    const r = await fetch(url, { headers, signal: AbortSignal.timeout(12000) });
+    const text = await r.text();
+    // Check if it's HTML (blocked) or JSON
+    if (text.trim().startsWith('<')) {
+      console.log('[PROXY] Reddit returned HTML for q=' + q + ' status=' + r.status);
+      // Try alternative: reddit old style
+      const url2 = 'https://old.reddit.com/search.json?q=' + encodeURIComponent(q) + '&sort=new&limit=25&t=day';
+      const r2 = await fetch(url2, { headers, signal: AbortSignal.timeout(12000) });
+      const text2 = await r2.text();
+      if (text2.trim().startsWith('{')) {
+        res.json(JSON.parse(text2));
+      } else {
+        res.json({ data: { children: [] } });
+      }
+    } else {
+      res.json(JSON.parse(text));
+    }
   } catch (e) {
+    console.log('[PROXY] error q=' + q + ': ' + e.message);
     res.status(500).json({ error: e.message });
   }
 });
+
+
+// AUTO-SCAN every 2h using proxy endpoint
+const SCAN_QUERIES = ["can't watch","not available in my country","geo blocked","streaming abroad","moving to china internet","moving to uae internet","internet censorship","bypass geo","isp throttling","watch from abroad","vpn","geoblocked streaming","not available in my region","blocked in my country","watch outside country"];
+
+async function proxyFetch(q) {
+  const url = 'https://www.reddit.com/search.json?q=' + encodeURIComponent(q) + '&sort=new&limit=25&t=day&raw_json=1';
+  try {
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'script:vpn-snipe:v1.0 (by /u/sudo_overcoffee)', 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(12000)
+    });
+    const text = await r.text();
+    if (text.trim().startsWith('<')) return [];
+    const d = JSON.parse(text);
+    return (d?.data?.children || []).map(c => c.data);
+  } catch { return []; }
+}
+
+const STRONG = ["can't watch","not available in","blocked in","streaming abroad","outside my country","outside the us","outside uk","geo restrict","geoblocked","bypass","unblock","vpn","proxy","internet in china","internet in russia","internet in uae","moving to china","moving to russia","moving to uae","isp throttl","censorship","being tracked","surveillance","region locked","country locked","access netflix","watch nfl"];
+const NEGS = ["where to stay","accommodation","airbnb","hotel","hostel","salary","visa application","job offer","bank account","dentist","recipe","restaurant","dating","pet","workout","weight loss","megathread","mod post","vpn not working","flight deal","things to do in","tourist","sightseeing"];
+
+function scorePost(p) {
+  const t = ((p.title||'')+' '+(p.selftext||'')).toLowerCase();
+  for (const n of NEGS) { if (t.includes(n)) return 0; }
+  if ((p.subreddit||'').toLowerCase().includes('vpn')) return 0;
+  let ok=false; for (const s of STRONG) { if (t.includes(s)) { ok=true; break; } }
+  if (!ok) return 0;
+  let sc=60;
+  const m=(Date.now()/1000-p.created_utc)/60;
+  if(m<15)sc+=80; else if(m<30)sc+=60; else if(m<60)sc+=40; else if(m<240)sc+=20; else if(m>1440)sc-=30;
+  const c=p.num_comments||0;
+  if(c===0)sc+=80; else if(c===1)sc+=50; else if(c<=3)sc+=30; else if(c<=10)sc+=10; else if(c>=20)sc-=20;
+  const ti=(p.title||'').toLowerCase();
+  if(ti.endsWith('?')||ti.startsWith('how')||ti.startsWith('what'))sc+=15;
+  if(t.includes('china')||t.includes('russia')||t.includes('iran')||t.includes('uae'))sc+=25;
+  if(t.includes('netflix')||t.includes('streaming')||t.includes('watch'))sc+=10;
+  return Math.max(0,Math.round(sc));
+}
+function getIntent(p) {
+  const t=((p.title||'')+' '+(p.selftext||'')).toLowerCase();
+  for (const s of STRONG) { if (t.includes(s)) return s; }
+  return 'vpn intent';
+}
+
+async function runAutoScan() {
+  const seen = new Set(posts.map(p => p.id));
+  let added = 0;
+  for (const q of SCAN_QUERIES) {
+    const results = await proxyFetch(q);
+    for (const p of results) {
+      if (seen.has(p.id)) continue;
+      const ageH = (Date.now()/1000 - p.created_utc)/3600;
+      if (ageH > 48) continue;
+      const score = scorePost(p);
+      if (score < 50) continue;
+      seen.add(p.id);
+      added++;
+      posts.unshift({ id:p.id, title:p.title, body:(p.selftext||'').substring(0,500), url:'https://reddit.com'+p.permalink, sub:p.subreddit, score, intent:getIntent(p), comments:p.num_comments||0, created:p.created_utc, upvotes:p.score||0, done:false, skipped:false, foundAt:Date.now() });
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  const cutoff = Date.now()/1000 - 48*3600;
+  posts = posts.filter(p => p.created > cutoff || p.done).slice(0, 300);
+  lastScan = new Date().toISOString();
+  console.log('[AUTO-SCAN] +' + added + ' posts, total=' + posts.length);
+}
+
+runAutoScan();
+setInterval(runAutoScan, 2 * 60 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('VPN Snipe running on port ' + PORT));
