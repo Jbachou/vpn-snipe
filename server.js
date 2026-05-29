@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fetch = require('node-fetch');
+const https = require('https');
 
 const app = express();
 app.use(cors());
@@ -51,23 +52,81 @@ function calcScore(post, signals) {
   return score;
 }
 
+// Fetch Reddit avec plusieurs stratégies
 async function fetchSubReddit(sub) {
-  const url = `https://www.reddit.com/r/${sub}/new.json?limit=25&raw_json=1`;
-  try {
-    const r = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-      },
-      timeout: 8000
-    });
-    if (r.ok) {
-      const d = await r.json();
-      return d.data.children.map(c => ({ ...c.data, subreddit: sub }));
+  const strategies = [
+    // Strategy 1: User-Agent Reddit script
+    async () => {
+      const r = await fetch(`https://www.reddit.com/r/${sub}/new.json?limit=25&raw_json=1`, {
+        headers: {
+          'User-Agent': 'VPNSnipe/1.0 (Node.js; contact: admin@vpnsnipe.com)',
+          'Accept': 'application/json',
+        },
+        timeout: 8000
+      });
+      if (r.ok) return r.json();
+      console.log(`[S1] r/${sub} status: ${r.status}`);
+      throw new Error('status ' + r.status);
+    },
+    // Strategy 2: old.reddit
+    async () => {
+      const r = await fetch(`https://old.reddit.com/r/${sub}/new.json?limit=25&raw_json=1`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)', 'Accept': 'application/json' },
+        timeout: 8000
+      });
+      if (r.ok) return r.json();
+      throw new Error('old.reddit status ' + r.status);
+    },
+    // Strategy 3: .json direct avec autre UA
+    async () => {
+      const r = await fetch(`https://www.reddit.com/r/${sub}.json?limit=25&sort=new`, {
+        headers: { 'User-Agent': 'curl/7.79.1', 'Accept': '*/*' },
+        timeout: 8000
+      });
+      if (r.ok) return r.json();
+      throw new Error('curl UA status ' + r.status);
     }
-  } catch(e) {}
+  ];
+
+  for (let i = 0; i < strategies.length; i++) {
+    try {
+      const d = await strategies[i]();
+      if (d && d.data && d.data.children) {
+        console.log(`[FETCH] r/${sub} ok via strategy ${i+1}, ${d.data.children.length} posts`);
+        return d.data.children.map(c => ({ ...c.data, subreddit: sub }));
+      }
+    } catch(e) {
+      console.log(`[FETCH] r/${sub} strategy ${i+1} failed: ${e.message}`);
+    }
+  }
   return [];
 }
+
+// DEBUG: tester le fetch Reddit directement
+app.get('/api/test-fetch', async (req, res) => {
+  const sub = req.query.sub || 'expats';
+  console.log(`[TEST] Testing fetch for r/${sub}`);
+  const results = [];
+  const ua_list = [
+    'VPNSnipe/1.0',
+    'Mozilla/5.0 (Windows NT 10.0)',
+    'curl/7.79.1',
+    'python-requests/2.28.0'
+  ];
+  for (const ua of ua_list) {
+    try {
+      const r = await fetch(`https://www.reddit.com/r/${sub}/new.json?limit=3&raw_json=1`, {
+        headers: { 'User-Agent': ua, 'Accept': 'application/json' },
+        timeout: 6000
+      });
+      const body = await r.text();
+      results.push({ ua, status: r.status, ok: r.ok, preview: body.slice(0, 100) });
+    } catch(e) {
+      results.push({ ua, error: e.message });
+    }
+  }
+  res.json(results);
+});
 
 app.post('/api/push', (req, res) => {
   const { results } = req.body;
@@ -85,12 +144,13 @@ app.post('/api/scan', async (req, res) => {
   if (isScanning) return res.json({ ok: false, message: 'already scanning' });
   isScanning = true;
   const subsToScan = req.body.subs || SNIPE_SUBS;
+  console.log(`[SCAN] Starting ${subsToScan.length} subs`);
   const allResults = [];
   for (let i = 0; i < subsToScan.length; i += 4) {
     const batch = subsToScan.slice(i, i + 4);
     const batchResults = await Promise.all(batch.map(fetchSubReddit));
     batchResults.forEach(r => allResults.push(...r));
-    if (i + 4 < subsToScan.length) await new Promise(r => setTimeout(r, 500));
+    if (i + 4 < subsToScan.length) await new Promise(r => setTimeout(r, 800));
   }
   const seen = new Set();
   const unique = allResults.filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true; });
@@ -119,6 +179,7 @@ app.post('/api/scan', async (req, res) => {
   posts = posts.filter(p => p.created > cutoff || p.done).slice(0, 300);
   lastScan = new Date().toISOString();
   isScanning = false;
+  console.log(`[SCAN] Done +${added} new, total=${posts.length}, scanned=${unique.length}, signal=${filtered.length}`);
   res.json({ ok: true, added, total: posts.length, scanned: unique.length, vpn_signal: filtered.length });
 });
 
