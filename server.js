@@ -115,13 +115,13 @@ async function fetchRedditSearch(query) {
   const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&sort=new&limit=25&t=day&raw_json=1`;
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 Chrome/120.0.0.0', 'Accept': 'application/json' },
-      timeout: 10000
+      headers: { 'User-Agent': 'VPNSnipeBot/1.0 by /u/sudo_overcoffee', 'Accept': 'application/json', 'Accept-Language': 'en-US,en;q=0.9' },
+      signal: AbortSignal.timeout(12000)
     });
-    if (!res.ok) return [];
+    if (!res.ok) { console.log('[SCAN] HTTP '+res.status+' for: '+query); return []; }
     const data = await res.json();
     return (data?.data?.children || []).map(c => c.data);
-  } catch (e) { return []; }
+  } catch (e) { console.log('[SCAN] Error "'+query+'": '+e.message); return []; }
 }
 
 async function runScan() {
