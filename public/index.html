@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>VPN·SNIPE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #07080b;
+  --bg2:     #0d0f14;
+  --bg3:     #12151c;
+  --bg4:     #181d27;
+  --border:  #1a2030;
+  --border2: #232d42;
+  --text:    #d4e0f0;
+  --dim:     #5a6b85;
+  --dim2:    #38475a;
+  --green:   #00e87a;
+  --green2:  #00b85f;
+  --red:     #ff3355;
+  --yellow:  #ffd426;
+  --cyan:    #00ccff;
+  --purple:  #b388ff;
+  --orange:  #ff7b35;
+  --gold:    #ffc832;
+  --sudo:    #ff7b35;
+  --layer8:  #00ccff;
+  --victor:  #b388ff;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px; overflow: hidden; }
+
+.app { display: flex; flex-direction: column; height: 100dvh; max-width: 1400px; margin: 0 auto; }
+
+.header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.logo { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; color: var(--red); letter-spacing: -0.5px; white-space: nowrap; }
+.logo span { color: var(--dim); font-weight: 700; }
+.scan-status { font-size: 10px; color: var(--dim); display: flex; align-items: center; gap: 5px; }
+.pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
+.pulse.scanning { background: var(--yellow); animation: pulse 0.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+.header-sep { flex: 1; }
+.api-btn {
+  font-size: 10px; font-weight: 700; padding: 4px 10px;
+  border-radius: 4px; border: 1px solid var(--border2);
+  background: transparent; color: var(--dim); cursor: pointer;
+  font-family: 'JetBrains Mono', monospace; transition: all 0.15s;
+}
+.api-btn:hover { border-color: var(--green2); color: var(--green); }
+.api-btn.ok { border-color: rgba(0,232,122,0.3); color: var(--green2); }
+
+.stats {
+  display: flex; background: var(--bg2); border-bottom: 1px solid var(--border);
+  flex-shrink: 0; overflow-x: auto;
+}
+.stat { flex: 1; min-width: 70px; padding: 6px 8px; text-align: center; border-right: 1px solid var(--border); }
+.stat:last-child { border-right: none; }
+.stat-n { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; line-height: 1; }
+.stat-l { font-size: 8px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px; }
+
+.main { flex: 1; display: flex; overflow: hidden; }
+.feed-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+.toolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 12px; background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0; flex-wrap: wrap;
+}
+.scan-btn {
+  font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 800;
+  letter-spacing: 1px; padding: 5px 16px;
+  background: var(--red); color: white; border: none;
+  border-radius: 5px; cursor: pointer; transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.scan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.scan-btn.scanning { background: var(--yellow); color: #000; animation: scan-pulse 0.8s ease-in-out infinite; }
+@keyframes scan-pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+.tb-sep { width: 1px; height: 18px; background: var(--border2); flex-shrink: 0; }
+.fchip {
+  font-size: 10px; font-weight: 700; padding: 4px 10px;
+  border-radius: 20px; border: 1px solid var(--border2);
+  background: transparent; color: var(--dim); cursor: pointer;
+  font-family: 'JetBrains Mono', monospace; transition: all 0.12s;
+  white-space: nowrap;
+}
+.fchip:hover { border-color: var(--red); color: var(--red); }
+.fchip.on { background: var(--red); border-color: var(--red); color: white; }
+.tb-sort {
+  font-size: 10px; padding: 4px 8px; border-radius: 4px;
+  border: 1px solid var(--border2); background: var(--bg3);
+  color: var(--text); font-family: 'JetBrains Mono', monospace;
+  margin-left: auto; cursor: pointer;
+}
+
+.prog { height: 2px; background: var(--border); flex-shrink: 0; display: none; }
+.prog.on { display: block; }
+.prog-fill { height: 100%; background: linear-gradient(90deg, var(--red), var(--purple)); transition: width 0.4s; }
+
+.log-bar {
+  padding: 4px 12px; font-size: 10px; color: var(--dim);
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  flex-shrink: 0; min-height: 22px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+.feed { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.feed::-webkit-scrollbar { width: 3px; }
+.feed::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.empty { padding: 48px 20px; text-align: center; color: var(--dim); }
+.empty-icon { font-size: 32px; opacity: 0.2; margin-bottom: 12px; }
+.card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 8px; overflow: hidden;
+  animation: card-in 0.2s ease; transition: border-color 0.15s;
+}
+@keyframes card-in { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+.card:hover { border-color: var(--border2); }
+.card.prime { border-color: rgba(255,200,50,0.4); background: rgba(255,200,50,0.02); }
+.card.fresh { border-color: rgba(255,51,85,0.3); }
+.card.done { opacity: 0.2; pointer-events: none; }
+
+.card-head { padding: 10px 12px 7px; display: flex; gap: 10px; align-items: flex-start; }
+.score-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
+.ring {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 11px; border: 2px solid;
+}
+.r-gold { background: rgba(255,200,50,0.12); border-color: var(--gold); color: var(--gold); }
+.r-red  { background: rgba(255,51,85,0.08);  border-color: var(--red);  color: var(--red);  }
+.r-cyan { background: rgba(0,204,255,0.08);   border-color: var(--cyan); color: var(--cyan); }
+.r-dim  { background: rgba(90,107,133,0.08);  border-color: var(--dim);  color: var(--dim);  }
+.score-lbl { font-size: 8px; color: var(--dim2); }
+
+.card-body { flex: 1; min-width: 0; }
+.card-top { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--dim); margin-bottom: 3px; flex-wrap: wrap; }
+.sub-tag { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 3px; background: rgba(0,204,255,0.08); border: 1px solid rgba(0,204,255,0.2); color: var(--cyan); white-space: nowrap; }
+.bdg { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+.bdg-prime { background: var(--gold); color: #000; }
+.bdg-new   { background: var(--red);  color: #fff; }
+.bdg-zero  { background: var(--green); color: #000; }
+.card-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.3; margin-bottom: 4px; display: block; text-decoration: none; }
+.card-title:hover { color: var(--red); }
+.card-meta { display: flex; gap: 8px; font-size: 10px; color: var(--dim); flex-wrap: wrap; align-items: center; }
+.intent-pill { font-size: 9px; padding: 2px 7px; border-radius: 10px; background: rgba(179,136,255,0.08); border: 1px solid rgba(179,136,255,0.2); color: var(--purple); }
+
+.card-snippet { padding: 0 12px 8px; font-size: 11px; color: var(--dim); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.ai-box { margin: 0 12px 8px; background: rgba(179,136,255,0.04); border: 1px solid rgba(179,136,255,0.15); border-radius: 6px; overflow: hidden; display: none; }
+.ai-box.on { display: block; }
+.ai-persona-tabs { display: flex; border-bottom: 1px solid rgba(179,136,255,0.15); }
+.ai-ptab { flex: 1; padding: 5px 6px; font-size: 10px; font-weight: 700; text-align: center; cursor: pointer; border: none; background: transparent; color: var(--dim); font-family: 'JetBrains Mono', monospace; transition: all 0.12s; }
+.ai-ptab.active-sudo   { color: var(--sudo);   border-bottom: 2px solid var(--sudo);   }
+.ai-ptab.active-layer8 { color: var(--layer8); border-bottom: 2px solid var(--layer8); }
+.ai-ptab.active-victor { color: var(--victor); border-bottom: 2px solid var(--victor); }
+.ai-content { padding: 10px 12px; }
+.ai-txt { font-size: 11px; color: var(--text); line-height: 1.7; white-space: pre-wrap; background: var(--bg4); padding: 8px 10px; border-radius: 4px; min-height: 36px; }
+.ai-loading { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 6px; }
+.spinner { width: 10px; height: 10px; border: 2px solid var(--border2); border-top-color: var(--purple); border-radius: 50%; animation: spin 0.5s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ai-acts { display: flex; gap: 5px; margin-top: 7px; }
+.copy-btn { font-size: 10px; font-weight: 700; padding: 4px 12px; border-radius: 4px; background: var(--purple); color: #000; border: none; cursor: pointer; font-family: 'JetBrains Mono', monospace; }
+.regen-btn { font-size: 10px; padding: 4px 10px; border-radius: 4px; background: transparent; border: 1px solid var(--purple); color: var(--purple); cursor: pointer; font-family: 'JetBrains Mono', monospace; }
+.edit-hint { font-size: 9px; color: var(--dim); margin-top: 5px; padding: 4px 8px; background: rgba(255,200,50,0.05); border: 1px solid rgba(255,200,50,0.12); border-radius: 4px; }
+
+.card-acts {
+  padding: 7px 12px; border-top: 1px solid var(--border);
+  display: flex; gap: 5px; align-items: center;
+  background: rgba(0,0,0,0.15); flex-wrap: wrap;
+}
+.ca {
+  font-size: 10px; font-weight: 700; padding: 5px 10px;
+  border-radius: 4px; border: 1px solid var(--border2);
+  background: transparent; color: var(--dim); cursor: pointer;
+  font-family: 'JetBrains Mono', monospace; transition: all 0.12s;
+  white-space: nowrap;
+}
+.ca:hover { color: var(--text); border-color: var(--border2); }
+.ca-sug { border-color: rgba(179,136,255,0.3); color: var(--purple); }
+.ca-sug:hover { background: rgba(179,136,255,0.08); }
+.ca-done:hover { background: rgba(0,232,122,0.08); border-color: var(--green2); color: var(--green); }
+.ca-skip:hover { background: rgba(255,51,85,0.08); border-color: var(--red); color: var(--red); }
+.ca-open { background: var(--red); border-color: var(--red); color: white; }
+.ca-open:hover { opacity: 0.85; }
+.ca-sep { flex: 1; }
+
+.panel {
+  width: 300px; flex-shrink: 0;
+  background: var(--bg2); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.panel-head {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+.panel-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 800; color: var(--gold); }
+.panel-count { font-size: 10px; color: var(--dim); }
+.panel-body { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 7px; }
+.panel-body::-webkit-scrollbar { width: 3px; }
+.panel-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.eq-item {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 7px; padding: 10px 11px; transition: border-color 0.15s;
+}
+.eq-item.ready { border-color: rgba(255,200,50,0.4); background: rgba(255,200,50,0.03); }
+.eq-item.overdue { border-color: rgba(255,51,85,0.4); background: rgba(255,51,85,0.03); }
+.eq-head { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 5px; }
+.eq-days { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; line-height: 1; min-width: 38px; text-align: center; }
+.eq-days.wait   { color: var(--dim); }
+.eq-days.ready  { color: var(--gold); }
+.eq-days.overdue{ color: var(--red); }
+.eq-info { flex: 1; min-width: 0; }
+.eq-title { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eq-meta { font-size: 9px; color: var(--dim); display: flex; gap: 6px; flex-wrap: wrap; }
+.eq-hint { font-size: 10px; color: var(--gold); margin-top: 5px; padding: 4px 7px; background: rgba(255,200,50,0.05); border-radius: 4px; line-height: 1.4; }
+.eq-acts { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+.eq-btn { font-size: 10px; font-weight: 700; padding: 4px 9px; border-radius: 4px; border: 1px solid var(--border2); background: transparent; color: var(--dim); cursor: pointer; font-family: 'JetBrains Mono', monospace; transition: all 0.12s; }
+.eq-btn.go   { border-color: rgba(255,200,50,0.4); color: var(--gold); }
+.eq-btn.done { border-color: rgba(0,232,122,0.3);  color: var(--green2); }
+.eq-btn.go:hover   { background: rgba(255,200,50,0.08); }
+.eq-btn.done:hover { background: rgba(0,232,122,0.08); }
+.eq-empty { padding: 30px 10px; text-align: center; color: var(--dim); font-size: 11px; line-height: 1.7; }
+
+.panel-toggle {
+  display: none; position: fixed; bottom: 16px; right: 16px;
+  background: var(--gold); color: #000; font-family: 'Syne', sans-serif;
+  font-size: 12px; font-weight: 800; padding: 10px 16px;
+  border-radius: 24px; border: none; cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4); z-index: 100;
+}
+.panel-mobile {
+  display: none; position: fixed; inset: 0;
+  background: var(--bg); z-index: 200; flex-direction: column;
+}
+.panel-mobile.open { display: flex; }
+.panel-mobile-close { padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--bg2); }
+.panel-mobile-close button { background: transparent; border: none; color: var(--dim); font-size: 18px; cursor: pointer; }
+
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 500; padding: 20px; }
+.modal-bg.open { display: flex; }
+.modal { background: var(--bg3); border: 1px solid var(--border2); border-radius: 10px; padding: 22px; width: 100%; max-width: 380px; }
+.modal h3 { font-family: 'Syne', sans-serif; color: var(--green); margin-bottom: 5px; }
+.modal p { font-size: 11px; color: var(--dim); margin-bottom: 12px; line-height: 1.6; }
+.modal input { width: 100%; background: var(--bg4); border: 1px solid var(--border2); color: var(--text); padding: 9px 11px; border-radius: 5px; font-family: 'JetBrains Mono', monospace; font-size: 12px; margin-bottom: 12px; outline: none; }
+.modal input:focus { border-color: var(--green2); }
+.modal-btns { display: flex; gap: 8px; }
+.mbtn { flex: 1; padding: 8px; border-radius: 5px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; cursor: pointer; border: 1px solid var(--border2); background: transparent; color: var(--dim); }
+.mbtn.ok { background: var(--green2); border-color: var(--green); color: #000; }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(6px); background: var(--bg3); border: 1px solid var(--border2); color: var(--text); padding: 7px 18px; border-radius: 20px; font-size: 11px; opacity: 0; transition: all 0.2s; z-index: 600; pointer-events: none; white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+.toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 768px) {
+  .panel { display: none; }
+  .panel-toggle { display: flex; align-items: center; gap: 6px; }
+  .panel-mobile .panel-body { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 7px; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="header">
+    <div class="logo">VPN·<span>SNIPE</span></div>
+    <div class="scan-status">
+      <div class="pulse" id="pulse"></div>
+      <span id="scan-status-txt">Loading...</span>
+    </div>
+    <div class="header-sep"></div>
+    <button class="api-btn" id="api-btn" onclick="openModal()">🔑 API Key</button>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-n" id="s-total">–</div><div class="stat-l">Found</div></div>
+    <div class="stat"><div class="stat-n" id="s-prime" style="color:var(--gold)">–</div><div class="stat-l">Prime</div></div>
+    <div class="stat"><div class="stat-n" id="s-zero"  style="color:var(--green)">–</div><div class="stat-l">0 replies</div></div>
+    <div class="stat"><div class="stat-n" id="s-fresh" style="color:var(--red)">–</div><div class="stat-l">&lt;1h</div></div>
+    <div class="stat"><div class="stat-n" id="s-queue" style="color:var(--gold)">–</div><div class="stat-l">Edit queue</div></div>
+  </div>
+  <div class="main">
+    <div class="feed-wrap">
+      <div class="toolbar">
+        <button class="scan-btn" id="scan-btn" onclick="triggerScan()">⊕ SCAN NOW</button>
+        <div class="tb-sep"></div>
+        <button class="fchip on" data-f="all"   onclick="setFilter('all',this)">All</button>
+        <button class="fchip"    data-f="prime" onclick="setFilter('prime',this)">⭐ Prime</button>
+        <button class="fchip"    data-f="zero"  onclick="setFilter('zero',this)">0 replies</button>
+        <button class="fchip"    data-f="fresh" onclick="setFilter('fresh',this)">⚡ &lt;1h</button>
+        <select class="tb-sort" onchange="renderFeed()">
+          <option value="score">Best score</option>
+          <option value="fresh">Freshest</option>
+          <option value="zero">0-reply first</option>
+        </select>
+      </div>
+      <div class="prog" id="prog"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+      <div class="log-bar" id="log-bar">Ready</div>
+      <div class="feed" id="feed"><div class="empty"><div class="empty-icon">⊕</div><div>Loading posts...</div></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">✏️ Edit Queue</div>
+        <div class="panel-count" id="eq-count-desktop">0 posts</div>
+      </div>
+      <div class="panel-body" id="eq-desktop"></div>
+    </div>
+  </div>
+</div>
+
+<button class="panel-toggle" id="panel-toggle-btn" onclick="openMobilePanel()">✏️ Queue <span id="eq-badge">0</span></button>
+
+<div class="panel-mobile" id="panel-mobile">
+  <div class="panel-mobile-close">
+    <div class="panel-title" style="flex:1">✏️ Edit Queue</div>
+    <button onclick="closeMobilePanel()">&#x2715;</button>
+  </div>
+  <div class="panel-body" id="eq-mobile"></div>
+</div>
+
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3>API Key</h3>
+    <p>Clé Anthropic — stockée localement dans votre navigateur.</p>
+    <input type="password" id="api-inp" placeholder="sk-ant-...">
+    <div class="modal-btns">
+      <button class="mbtn" onclick="closeModal()">Annuler</button>
+      <button class="mbtn ok" onclick="saveKey()">Sauvegarder</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+const EDIT_DAYS = 7;
+const API_BASE = '';
+
+let allPosts = [];
+let editQueue = [];
+let filter = 'all';
+let activePersona = {};
+let suggestions = {};
+let loadingPersona = {};
+let pollTimer = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  updateApiBtn();
+  document.getElementById('api-inp').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveKey();
+    if (e.key === 'Escape') closeModal();
+  });
+  loadData();
+  pollTimer = setInterval(loadData, 30000);
+});
+
+async function loadData() {
+  try {
+    const res = await fetch(API_BASE + '/api/posts');
+    const data = await res.json();
+    allPosts = data.posts || [];
+    editQueue = data.editQueue || [];
+    const isScanning = data.isScanning;
+    const pulse = document.getElementById('pulse');
+    pulse.className = 'pulse' + (isScanning ? ' scanning' : '');
+    const lastScan = data.lastScan ? new Date(data.lastScan).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '-';
+    document.getElementById('scan-status-txt').textContent = isScanning ? 'Scanning...' : 'Last scan: ' + lastScan;
+    const scanBtn = document.getElementById('scan-btn');
+    if (isScanning) { scanBtn.textContent = 'SCANNING...'; scanBtn.disabled = true; scanBtn.classList.add('scanning'); }
+    else { scanBtn.textContent = 'SCAN NOW'; scanBtn.disabled = false; scanBtn.classList.remove('scanning'); }
+    if (data.scanLog && data.scanLog.length) {
+      document.getElementById('log-bar').textContent = data.scanLog[data.scanLog.length - 1];
+    }
+    updateStats();
+    renderFeed();
+    renderQueue();
+  } catch(e) {
+    document.getElementById('log-bar').textContent = 'Error connecting to server...';
+  }
+}
+
+function updateStats() {
+  const active = allPosts.filter(p => !p.done && !p.skipped);
+  document.getElementById('s-total').textContent = active.length;
+  document.getElementById('s-prime').textContent = active.filter(p => isPrime(p)).length;
+  document.getElementById('s-zero').textContent  = active.filter(p => p.comments === 0).length;
+  document.getElementById('s-fresh').textContent = active.filter(p => (Date.now()/1000 - p.created) < 3600).length;
+  const qCount = editQueue.length;
+  document.getElementById('s-queue').textContent = qCount;
+  document.getElementById('eq-badge').textContent = qCount;
+  document.getElementById('eq-count-desktop').textContent = qCount + ' post' + (qCount !== 1 ? 's' : '');
+}
+
+function isPrime(p) {
+  return (Date.now()/1000 - p.created) < 1800 && p.comments <= 2 && p.score >= 100;
+}
+
+function ringClass(s) {
+  if (s >= 200) return 'r-gold';
+  if (s >= 150) return 'r-red';
+  if (s >= 100) return 'r-cyan';
+  return 'r-dim';
+}
+
+function setFilter(f, btn) {
+  filter = f;
+  document.querySelectorAll('.fchip[data-f]').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderFeed();
+}
+
+function renderFeed() {
+  const feed = document.getElementById('feed');
+  const sort = document.querySelector('.tb-sort') ? document.querySelector('.tb-sort').value : 'score';
+  let posts = allPosts.filter(p => !p.done && !p.skipped);
+  if (filter === 'prime') posts = posts.filter(p => isPrime(p));
+  else if (filter === 'zero') posts = posts.filter(p => p.comments === 0);
+  else if (filter === 'fresh') posts = posts.filter(p => (Date.now()/1000 - p.created) < 3600);
+  if (sort === 'score') posts.sort((a,b) => b.score - a.score);
+  else if (sort === 'fresh') posts.sort((a,b) => b.created - a.created);
+  else if (sort === 'zero') posts.sort((a,b) => a.comments - b.comments || b.score - a.score);
+
+  if (!posts.length) {
+    feed.innerHTML = '<div class="empty"><div class="empty-icon">&#x2295;</div><div>' + (allPosts.length ? 'No posts match this filter.' : 'Waiting for scan results...') + '</div></div>';
+    return;
+  }
+  feed.innerHTML = posts.map(p => cardHTML(p)).join('');
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function ago(ts) { const s = Math.floor(Date.now()/1000 - ts); if(s<60)return s+'s'; if(s<3600)return Math.floor(s/60)+'m'; if(s<86400)return Math.floor(s/3600)+'h'; return Math.floor(s/86400)+'d'; }
+
+function cardHTML(p) {
+  const s = p.score;
+  const isP = isPrime(p);
+  const isN = (Date.now()/1000 - p.created) < 3600;
+  const isZ = p.comments === 0;
+  const cls = isP ? 'card prime' : isN ? 'card fresh' : 'card';
+  const badges = [];
+  if (isP) badges.push('<span class="bdg bdg-prime">PRIME</span>');
+  else if (isN) badges.push('<span class="bdg bdg-new">NEW</span>');
+  if (isZ) badges.push('<span class="bdg bdg-zero">0 replies</span>');
+  const persona = activePersona[p.id] || 'sudo';
+  const sug = suggestions[p.id] && suggestions[p.id][persona];
+  const loading = loadingPersona[p.id] === persona;
+  const aiContent = loading
+    ? '<div class="ai-loading"><div class="spinner"></div>Generating for ' + persona + '...</div>'
+    : sug
+    ? '<div class="ai-txt">' + esc(sug) + '</div><div class="ai-acts"><button class="copy-btn" onclick="copyAI(\'' + p.id + '\')">📋 Copy</button><button class="regen-btn" onclick="genAI(\'' + p.id + '\')">↺ Regen</button></div><div class="edit-hint">✏️ After posting → Done → edit queue J+' + EDIT_DAYS + '</div>'
+    : '<div class="ai-txt" style="color:var(--dim2);font-size:10px">Click Generate to get a reply suggestion</div>';
+  return '<div class="' + cls + '" id="card-' + p.id + '"><div class="card-head"><div class="score-wrap"><div class="ring ' + ringClass(s) + '">' + s + '</div><div class="score-lbl">score</div></div><div class="card-body"><div class="card-top"><span class="sub-tag">r/' + esc(p.sub) + '</span>' + badges.join('') + '<span style="margin-left:auto">' + ago(p.created) + ' 💬' + p.comments + '</span></div><a class="card-title" href="' + p.url + '" target="_blank">' + esc(p.title) + '</a><div class="card-meta"><span>⬆ ' + p.upvotes + '</span><span class="intent-pill">' + esc(p.intent) + '</span></div></div></div>' + (p.body ? '<div class="card-snippet">' + esc(p.body) + '</div>' : '') + '<div class="ai-box ' + (sug || loading ? 'on' : '') + '" id="ai-' + p.id + '"><div class="ai-persona-tabs"><button class="ai-ptab ' + (persona === 'sudo' ? 'active-sudo' : '') + '" onclick="switchPersona(\'' + p.id + '\',\'sudo\')">&#x2615; sudo</button><button class="ai-ptab ' + (persona === 'layer8' ? 'active-layer8' : '') + '" onclick="switchPersona(\'' + p.id + '\',\'layer8\')">&#x1f527; layer8</button><button class="ai-ptab ' + (persona === 'victor' ? 'active-victor' : '') + '" onclick="switchPersona(\'' + p.id + '\',\'victor\')">&#x1f396; victor</button></div><div class="ai-content">' + aiContent + '</div></div><div class="card-acts"><button class="ca ca-open" onclick="window.open(\'' + p.url + '\',\'_blank\')">Open &#x2197;</button><button class="ca ca-sug" onclick="genAI(\'' + p.id + '\')">🤖 Generate</button><button class="ca ca-done" onclick="markDone(\'' + p.id + '\')">&#x2713; Posted</button><button class="ca ca-skip" onclick="skipPost(\'' + p.id + '\')">&#x2715; Skip</button></div></div>';
+}
+
+function switchPersona(id, p) {
+  activePersona[id] = p;
+  const post = allPosts.find(x => x.id === id);
+  if (!post) return;
+  const el = document.getElementById('card-' + id);
+  if (!el) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = cardHTML(post);
+  el.replaceWith(tmp.firstElementChild);
+}
+
+async function genAI(id) {
+  const post = allPosts.find(p => p.id === id);
+  if (!post) return;
+  const key = localStorage.getItem('snipe_key');
+  if (!key) { openModal(); return; }
+  const persona = activePersona[id] || 'sudo';
+  loadingPersona[id] = persona;
+  const box = document.getElementById('ai-' + id);
+  if (box) box.classList.add('on');
+  refreshCard(id);
+  try {
+    const res = await fetch(API_BASE + '/api/suggest', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postId: id, persona, apiKey: key })
+    });
+    const data = await res.json();
+    if (!suggestions[id]) suggestions[id] = {};
+    suggestions[id][persona] = data.reply || data.error || 'Error';
+  } catch(e) {
+    if (!suggestions[id]) suggestions[id] = {};
+    suggestions[id][persona] = 'Error: ' + e.message;
+  }
+  delete loadingPersona[id];
+  refreshCard(id);
+}
+
+function copyAI(id) {
+  const persona = activePersona[id] || 'sudo';
+  const t = suggestions[id] && suggestions[id][persona];
+  if (!t) return;
+  navigator.clipboard.writeText(t).then(() => toast('Copied!')).catch(() => {
+    const ta = document.createElement('textarea'); ta.value = t;
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    toast('Copied!');
+  });
+}
+
+function refreshCard(id) {
+  const post = allPosts.find(p => p.id === id);
+  if (!post) return;
+  const el = document.getElementById('card-' + id);
+  if (!el) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = cardHTML(post);
+  el.replaceWith(tmp.firstElementChild);
+}
+
+async function markDone(id) {
+  const post = allPosts.find(p => p.id === id);
+  if (!post) return;
+  const persona = activePersona[id] || 'sudo';
+  const reply = suggestions[id] && suggestions[id][persona] ? suggestions[id][persona] : null;
+  try {
+    await fetch(API_BASE + '/api/done', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, persona, reply })
+    });
+    post.done = true;
+    const el = document.getElementById('card-' + id);
+    if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.25s'; setTimeout(() => el.remove(), 250); }
+    await loadData();
+    toast('Added to edit queue J+' + EDIT_DAYS);
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function skipPost(id) {
+  const post = allPosts.find(p => p.id === id);
+  if (post) post.skipped = true;
+  try {
+    await fetch(API_BASE + '/api/skip', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+  } catch {}
+  const el = document.getElementById('card-' + id);
+  if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.25s'; setTimeout(() => el.remove(), 250); }
+}
+
+async function triggerScan() {
+  try {
+    await fetch(API_BASE + '/api/scan', { method: 'POST' });
+    toast('Scan started!');
+    setTimeout(loadData, 1000);
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+function renderQueue() {
+  const html = buildQueueHTML();
+  const d = document.getElementById('eq-desktop');
+  const m = document.getElementById('eq-mobile');
+  if (d) d.innerHTML = html;
+  if (m) m.innerHTML = html;
+}
+
+function buildQueueHTML() {
+  if (!editQueue.length) return '<div class="eq-empty">No edits pending.<br><br>Snipe → post → Done to fill queue.</div>';
+  const now = Date.now();
+  const items = editQueue.map(item => {
+    const elapsed = (now - item.postedAt) / 86400000;
+    const left = Math.ceil(EDIT_DAYS - elapsed);
+    return Object.assign({}, item, {left, ready: left <= 0, over: left < -2});
+  }).sort((a, b) => a.left - b.left);
+  const pColor = p => p === 'sudo' ? 'var(--sudo)' : p === 'layer8' ? 'var(--layer8)' : 'var(--victor)';
+  return items.map(item => {
+    const cls = item.over ? 'eq-item overdue' : item.ready ? 'eq-item ready' : 'eq-item';
+    const dayCls = item.over ? 'overdue' : item.ready ? 'ready' : 'wait';
+    const dayTxt = item.ready ? (item.over ? 'LATE' : 'NOW') : item.left + 'd';
+    return '<div class="' + cls + '"><div class="eq-head"><div><div class="eq-days ' + dayCls + '">' + dayTxt + '</div><div style="font-size:8px;color:var(--dim2);text-align:center">' + (item.ready ? 'EDIT' : 'to edit') + '</div></div><div class="eq-info"><div class="eq-title">' + esc(item.title) + '</div><div class="eq-meta"><span>r/' + item.sub + '</span><span style="color:' + pColor(item.persona) + '">' + item.persona + '</span><span>' + new Date(item.postedAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) + '</span></div></div></div>' + (item.ready ? '<div class="eq-hint">"edit: found a solid comparison — <a href="#" style="color:var(--gold)">HERE</a>"</div>' : '') + '<div class="eq-acts"><a class="eq-btn go" href="' + item.url + '" target="_blank">Open &#x2197;</a>' + (item.ready ? '<button class="eq-btn done" onclick="doneEdit(\'' + item.id + '\')">&#x2713; Edited</button>' : '') + '</div></div>';
+  }).join('');
+}
+
+async function doneEdit(id) {
+  try {
+    await fetch(API_BASE + '/api/edit-done', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    await loadData();
+    toast('Edit marked done!');
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+function openMobilePanel() { document.getElementById('panel-mobile').classList.add('open'); }
+function closeMobilePanel() { document.getElementById('panel-mobile').classList.remove('open'); }
+
+function openModal() { document.getElementById('api-inp').value = localStorage.getItem('snipe_key') || ''; document.getElementById('modal').classList.add('open'); setTimeout(() => document.getElementById('api-inp').focus(), 50); }
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+function saveKey() { const k = document.getElementById('api-inp').value.trim(); if (k) { localStorage.setItem('snipe_key', k); toast('Key saved!'); } closeModal(); updateApiBtn(); }
+function updateApiBtn() { const b = document.getElementById('api-btn'); if (localStorage.getItem('snipe_key')) { b.textContent = 'Key OK'; b.classList.add('ok'); } else { b.textContent = '🔑 API Key'; b.classList.remove('ok'); } }
+
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2200); }
+</script>
+</body>
+</html>
