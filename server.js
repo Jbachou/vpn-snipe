@@ -78,5 +78,25 @@ app.get('/api/status', (req, res) => {
   res.json({ posts: posts.filter(p => !p.skipped && !p.done).length, editQueue: editQueue.filter(i => !i.doneEdit).length, lastScan });
 });
 
+
+// PROXY — fetch Reddit server-side to avoid CORS
+app.get('/proxy', async (req, res) => {
+  const url = req.query.url;
+  if (!url || !url.includes('reddit.com')) return res.status(400).json({ error: 'invalid url' });
+  try {
+    const r = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; VPNSnipeBot/1.0)',
+        'Accept': 'application/json'
+      },
+      signal: AbortSignal.timeout(10000)
+    });
+    const data = await r.json();
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('VPN Snipe running on port ' + PORT));
